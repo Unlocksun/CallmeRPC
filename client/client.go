@@ -12,15 +12,11 @@ import (
 
 func main() {
 	// client
-	// 用chan确保阻塞在连接前
-	addr := make(chan string)
-	addr <- "124.223.48.188:9007"
-	conn, _ := net.Dial("tcp", <-addr)
+	addr := "124.223.48.188:9007"
+	conn, _ := net.Dial("tcp", addr)
 	defer func() {
 		_ = conn.Close()
 	}()
-
-	time.Sleep(time.Second)
 
 	log.Println("start the client")
 
@@ -28,12 +24,14 @@ func main() {
 	_ = json.NewEncoder(conn).Encode(geerpc.DefaultOption)
 	cc := codec.NewGobCodec(conn)
 
+	// 通过sleep防止option和header混在一起
+	time.Sleep(time.Second)
+
 	for i := 0; i < 5; i++ {
 		// 发送header和body
 		h := &codec.Header{
 			ServiceMethod: "Foo.Sum",
 			Seq:           uint64(i),
-			Err:           "nil",
 		}
 		_ = cc.Write(h, fmt.Sprintf("geerpc req %d", h.Seq))
 
