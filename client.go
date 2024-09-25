@@ -9,6 +9,7 @@ import (
 	"log"
 	"net"
 	"sync"
+	"time"
 )
 
 type Call struct {
@@ -110,6 +111,7 @@ func NewClient(conn net.Conn, opt *Option) (*Client, error) {
 		_ = conn.Close()
 		return nil, err
 	}
+	time.Sleep(time.Second)
 	return NewClientWithCodec(f(conn), opt), nil
 }
 
@@ -213,7 +215,7 @@ func (client *Client) send(call *Call) {
 func (client *Client) registerCall(call *Call) (uint64, error) {
 	client.mu.Lock()
 	defer client.mu.Unlock()
-	if !client.closing && !client.shutdown {
+	if client.closing || client.shutdown {
 		return 0, ErrShutdown
 	}
 
