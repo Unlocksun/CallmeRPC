@@ -213,7 +213,7 @@ func (client *Client) send(call *Call) {
 func (client *Client) registerCall(call *Call) (uint64, error) {
 	client.mu.Lock()
 	defer client.mu.Unlock()
-	if !client.IsAvalable() {
+	if !client.closing && !client.shutdown {
 		return 0, ErrShutdown
 	}
 
