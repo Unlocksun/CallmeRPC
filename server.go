@@ -53,6 +53,7 @@ func Accept(lis net.Listener) {
 	DefaultServer.Accept(lis)
 }
 
+// 协程连接处理
 func (server *Server) ServeConn(conn io.ReadWriteCloser) {
 	defer func() { _ = conn.Close() }()
 
@@ -90,7 +91,7 @@ var invalidRequest = struct{}{}
 // 读取, 处理, 回复请求
 func (server *Server) serverCodec(cc codec.Codec) {
 	sending := new(sync.Mutex) // 保证回复报文不会交织
-	wg := new(sync.WaitGroup)  // 类似于条件变量
+	wg := new(sync.WaitGroup)  // 类似于信号量, 确保goroutine在关闭连接前已经全部handleRequest结束
 	for {
 		req, err := server.readRequest(cc)
 		if err != nil {
@@ -103,6 +104,7 @@ func (server *Server) serverCodec(cc codec.Codec) {
 			continue
 		}
 		wg.Add(1)
+		// 新起routine处理请求
 		go server.handleRequest(cc, req, sending, wg)
 	}
 	wg.Wait()

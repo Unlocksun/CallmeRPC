@@ -23,8 +23,9 @@ func NewGobCodec(conn io.ReadWriteCloser) Codec {
 	return &GobCodec{
 		conn: conn,
 		buf:  buf,
-		dec:  gob.NewDecoder(conn),
-		enc:  gob.NewEncoder(buf),
+		// 解码(读)可以直接进行, 编码(写)需要用buf来减少对conn的操作
+		dec: gob.NewDecoder(conn),
+		enc: gob.NewEncoder(buf),
 	}
 }
 
