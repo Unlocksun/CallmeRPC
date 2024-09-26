@@ -21,6 +21,7 @@ type Call struct {
 	Done          chan *Call // 异步调用时, 用于通知用户完成
 }
 
+// 通知客户端调用结束
 func (call *Call) done() {
 	call.Done <- call
 }
