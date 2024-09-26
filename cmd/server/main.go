@@ -1,7 +1,7 @@
 package main
 
 import (
-	geerpc "GeeRPC"
+	"GeeRPC/service"
 	"log"
 	"net"
 )
@@ -12,9 +12,13 @@ func startServer() {
 		log.Fatal("network error!:", err)
 	}
 	log.Println("start rpc server!", l.Addr())
-	geerpc.Accept(l)
+	service.Accept(l)
 }
 
 func main() {
 	startServer()
+	var foo service.Foo
+	if err := service.Register(&foo); err != nil {
+		log.Fatal("register error: ", err)
+	}
 }

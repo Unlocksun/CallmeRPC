@@ -1,8 +1,7 @@
 package main
 
 import (
-	geerpc "GeeRPC"
-	"fmt"
+	"GeeRPC/service"
 	"log"
 	"sync"
 )
@@ -11,7 +10,7 @@ func main() {
 	// client
 	addr := "124.223.48.188:9007"
 
-	if client, err := geerpc.Dial("tcp", addr); err != nil {
+	if client, err := service.Dial("tcp", addr); err != nil {
 		log.Fatal("dial failed:", err)
 	} else {
 		defer client.Close()
@@ -20,12 +19,12 @@ func main() {
 			wg.Add(1)
 			go func(int) {
 				defer wg.Done()
-				args := fmt.Sprintf("geerpc req %d", i)
-				var reply string
+				args := &service.Args{Num1: i, Num2: i * i}
+				var reply int
 				if err := client.Call("Foo.sum", args, &reply); err != nil {
 					log.Fatal("call foo.sum failed: ", err)
 				}
-				log.Println("reply: ", reply)
+				log.Printf("Reply from server: %d + %d = %d", args.Num1, args.Num2, reply)
 			}(i)
 		}
 		wg.Wait()

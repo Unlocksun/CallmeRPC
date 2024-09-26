@@ -1,13 +1,14 @@
-package geerpc
+package service
 
 import (
 	"GeeRPC/codec"
 	"encoding/json"
-	"fmt"
+	"errors"
 	"io"
 	"log"
 	"net"
 	"reflect"
+	"strings"
 	"sync"
 )
 
@@ -27,7 +28,9 @@ var DefaultOption = &Option{
 	CodecType:      codec.GobType,
 }
 
-type Server struct{}
+type Server struct {
+	serviceMap sync.Map
+}
 
 func NewServer() *Server {
 	return &Server{}
@@ -36,6 +39,43 @@ func NewServer() *Server {
 // 提供一个全局的默认Server示例, 类似单例模式
 var DefaultServer = NewServer()
 
+// 注册方法
+func (server *Server) Register(receiver interface{}) error {
+	s := newService(receiver)
+	if _, dup := server.serviceMap.LoadOrStore(s.name, s); dup {
+		return errors.New("rpc server: service already defined: " + s.name)
+	}
+	return nil
+}
+
+// 默认Server的注册
+func Register(receiver interface{}) error { return DefaultServer.Register(receiver) }
+
+// 根据传入的方法字符寻找对应的方法
+func (server *Server) findServiceDotMethod(serviceMethod string) (svc *service, mtype *methodType, err error) {
+	dot := strings.LastIndex(serviceMethod, ".")
+	if dot < 0 {
+		err = errors.New("rpc server: service/method request ill-formed: " + serviceMethod)
+		return
+	}
+	serviceName, methodName := serviceMethod[:dot], serviceMethod[dot+1:]
+
+	// 寻找service
+	svci, ok := server.serviceMap.Load(serviceName)
+	if !ok {
+		err = errors.New("rpc server: can't find service " + serviceName)
+		return
+	}
+	svc = svci.(*service)
+	// 寻找service的methodName方法
+	mtype = svc.method[methodName]
+	if mtype == nil {
+		err = errors.New("rpc server: can't find method" + methodName)
+	}
+	return svc, mtype, nil
+}
+
+// 处理新的连接
 func (server *Server) Accept(lis net.Listener) {
 	// 循环监听
 	for {
@@ -83,6 +123,8 @@ func (server *Server) ServeConn(conn io.ReadWriteCloser) {
 type request struct {
 	h            *codec.Header
 	argv, replyv reflect.Value // 由于编码方式要到运行时确定, 所以用reflect.Value类型
+	mtype        *methodType
+	svc          *service
 }
 
 // invalidRequest is a placeholder for response argv when error occurs
@@ -129,10 +171,24 @@ func (server *Server) readRequest(cc codec.Codec) (req *request, err error) {
 		return nil, err
 	}
 	req = &request{h: h}
-	// 暂且当是string
-	req.argv = reflect.New(reflect.TypeOf(""))
-	if err = cc.ReadBody(req.argv.Interface()); err != nil {
+	// 根据header找到对应服务
+	req.svc, req.mtype, err = server.findServiceDotMethod(h.ServiceMethod)
+	if err != nil {
+		return req, err
+	}
+	req.argv = req.mtype.newArgv()
+	req.replyv = req.mtype.newReplyv()
+
+	// 读取输入参数
+	// make sure that argvi is a pointer, ReadBody need a pointer as parameter
+	argvi := req.argv.Interface()
+	if req.argv.Type().Kind() != reflect.Ptr {
+		argvi = req.argv.Addr().Interface()
+	}
+
+	if err = cc.ReadBody(argvi); err != nil {
 		log.Println("rpc server: read argv error:", err)
+		return req, err
 	}
 
 	return req, nil
@@ -147,9 +203,12 @@ func (server *Server) sendResponse(cc codec.Codec, h *codec.Header, body interfa
 }
 
 func (server *Server) handleRequest(cc codec.Codec, req *request, sending *sync.Mutex, wg *sync.WaitGroup) {
-	// 注册rpc方式获得回复内容, 目前打印hello就行
 	defer wg.Done()
-	log.Println(req.h, req.argv.Elem())
-	req.replyv = reflect.ValueOf(fmt.Sprintf("geerpc resp %d", req.h.Seq))
+	err := req.svc.call(req.mtype, req.argv, req.replyv)
+	if err != nil {
+		req.h.Err = err.Error()
+		server.sendResponse(cc, req.h, invalidRequest, sending)
+		return
+	}
 	server.sendResponse(cc, req.h, req.replyv.Interface(), sending)
 }

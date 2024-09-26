@@ -21,6 +21,7 @@ func (m *methodType) GetNumCalls() uint64 {
 	return atomic.LoadUint64(&m.numCalls)
 }
 
+// 根据调用方法返回其输入输出参数类型
 func (m *methodType) newArgv() reflect.Value {
 	var argv reflect.Value
 	if m.ArgType.Kind() == reflect.Ptr {
@@ -30,7 +31,6 @@ func (m *methodType) newArgv() reflect.Value {
 	}
 	return argv
 }
-
 func (m *methodType) newReplyv() reflect.Value {
 	replyv := reflect.New(m.ReplyType.Elem())
 	switch m.ReplyType.Elem().Kind() {
