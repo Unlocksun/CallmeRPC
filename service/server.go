@@ -70,7 +70,8 @@ func (server *Server) findServiceDotMethod(serviceMethod string) (svc *service, 
 	// 寻找service的methodName方法
 	mtype = svc.method[methodName]
 	if mtype == nil {
-		err = errors.New("rpc server: can't find method" + methodName)
+		err = errors.New("rpc server: can't find method " + methodName)
+		return svc, mtype, err
 	}
 	return svc, mtype, nil
 }

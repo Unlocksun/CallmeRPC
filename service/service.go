@@ -55,7 +55,7 @@ func newService(rcvr interface{}) *service {
 	s.receiver = reflect.ValueOf(rcvr)
 	// Indirect: If s.rcvr is not a pointer, Indirect returns s.rcvr.
 	s.name = reflect.Indirect(s.receiver).Type().Name()
-	s.typ = reflect.TypeOf(s.receiver)
+	s.typ = reflect.TypeOf(rcvr)
 	if !ast.IsExported(s.name) {
 		log.Fatalf("rpc server: %s is not a valid service name", s.name)
 	}

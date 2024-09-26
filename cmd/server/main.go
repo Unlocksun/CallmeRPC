@@ -12,13 +12,15 @@ func startServer() {
 		log.Fatal("network error!:", err)
 	}
 	log.Println("start rpc server!", l.Addr())
+
+	var foo service.Foo
+	if err := service.Register(&foo); err != nil {
+		log.Fatal("register error: ", err)
+	}
+
 	service.Accept(l)
 }
 
 func main() {
 	startServer()
-	var foo service.Foo
-	if err := service.Register(&foo); err != nil {
-		log.Fatal("register error: ", err)
-	}
 }
