@@ -186,11 +186,12 @@ func (client *Client) receive() {
 			call.done()
 		}
 	}
-	// error occurs or EOF
+	// EOF, 一般来说读到EOF说明服务器关闭了连接
 	client.terminateCall(err)
 }
 
 // 异步调用方法
+// 实际使用中可以使用同步接口Call, 或者新起一个routine去等待返回
 func (client *Client) Go(serviceMethod string, args, reply interface{}, done chan *Call) *Call {
 	if done == nil {
 		done = make(chan *Call)
