@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"time"
 )
 
 // GeeRPC 客户端固定采用 JSON 编码 Option，后续的 header 和 body 的编码方式由 Option 中的 CodeType 指定
@@ -21,11 +22,14 @@ const Identify = 0x31dfa9
 type Option struct {
 	OptionIdentify int //标识这是个geerpc包
 	CodecType      codec.Type
+	ConnectTimeout time.Duration // 0为无限制
+	HandleTimeout  time.Duration
 }
 
 var DefaultOption = &Option{
 	OptionIdentify: Identify,
 	CodecType:      codec.GobType,
+	ConnectTimeout: time.Second * 10,
 }
 
 type Server struct {
