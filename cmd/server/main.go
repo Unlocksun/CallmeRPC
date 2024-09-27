@@ -1,6 +1,7 @@
 package main
 
 import (
+	"GeeRPC/foo"
 	"GeeRPC/service"
 	"log"
 	"net"
@@ -13,8 +14,8 @@ func startServer() {
 	}
 	log.Println("start rpc server!", l.Addr())
 
-	var foo service.Foo
-	if err := service.Register(&foo); err != nil {
+	var fooservice foo.Foo
+	if err := service.Register(&fooservice); err != nil {
 		log.Fatal("register error: ", err)
 	}
 

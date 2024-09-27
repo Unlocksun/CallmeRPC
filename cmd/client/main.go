@@ -1,6 +1,7 @@
 package main
 
 import (
+	"GeeRPC/foo"
 	"GeeRPC/service"
 	"log"
 	"sync"
@@ -19,7 +20,7 @@ func main() {
 			wg.Add(1)
 			go func(int) {
 				defer wg.Done()
-				args := &service.Args{Num1: i, Num2: i * i}
+				args := &foo.Args{Num1: i, Num2: i * i}
 				var reply int
 				if err := client.Call("Foo.sum", args, &reply); err != nil {
 					log.Fatal("call foo.sum failed: ", err)
