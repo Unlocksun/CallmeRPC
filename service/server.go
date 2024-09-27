@@ -211,19 +211,29 @@ func (server *Server) sendResponse(cc codec.Codec, h *codec.Header, body interfa
 
 func (server *Server) handleRequest(cc codec.Codec, req *request, sending *sync.Mutex, wg *sync.WaitGroup, timeout time.Duration) {
 	defer wg.Done()
-	called := make(chan struct{})
-	sent := make(chan struct{})
+	// 加一个buf, 防止超时后子协程阻塞在写通道
+	called := make(chan struct{}, 1)
+	sent := make(chan struct{}, 1)
+	done := make(chan struct{}) // 发送完成, 确保只发一次response
+	defer close(done)
 	go func() {
 		err := req.svc.call(req.mtype, req.argv, req.replyv)
-		called <- struct{}{}
-		if err != nil {
-			req.h.Err = err.Error()
-			server.sendResponse(cc, req.h, invalidRequest, sending)
+		select {
+		case called <- struct{}{}:
+			if err != nil {
+				req.h.Err = err.Error()
+				server.sendResponse(cc, req.h, invalidRequest, sending)
+				sent <- struct{}{}
+				return
+			}
+			server.sendResponse(cc, req.h, req.replyv.Interface(), sending)
 			sent <- struct{}{}
+		case <-done:
+			close(called)
+			close(sent)
 			return
 		}
-		server.sendResponse(cc, req.h, req.replyv.Interface(), sending)
-		sent <- struct{}{}
+
 	}()
 	if timeout == 0 {
 		<-called
@@ -235,6 +245,7 @@ func (server *Server) handleRequest(cc codec.Codec, req *request, sending *sync.
 	case <-time.After(timeout):
 		req.h.Err = fmt.Sprintf("rpc server: request handle timeout: expect within: %s", timeout)
 		server.sendResponse(cc, req.h, req.replyv.Interface(), sending)
+		done <- struct{}{}
 
 	// 调用未超时, 阻塞等待发送完成
 	case <-called:

@@ -100,7 +100,8 @@ func dialTimeout(f newClientFunc, network, addr string, opts ...*Option) (client
 			_ = conn.Close()
 		}
 	}()
-	ch := make(chan clientResult)
+	// 加上buf防止子协程泄露
+	ch := make(chan clientResult, 1)
 	// 通过子协程创建新的client
 	go func() {
 		client, err := f(conn, opt)
