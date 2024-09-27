@@ -4,6 +4,7 @@ import (
 	"GeeRPC/codec"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net"
@@ -22,14 +23,15 @@ const Identify = 0x31dfa9
 type Option struct {
 	OptionIdentify int //标识这是个geerpc包
 	CodecType      codec.Type
-	ConnectTimeout time.Duration // 0为无限制
-	HandleTimeout  time.Duration
+	ConnectTimeout time.Duration // 客户端连接服务器时限, 0为无限制
+	HandleTimeout  time.Duration // 服务器处理和发送响应的时限, 0为无限制
 }
 
 var DefaultOption = &Option{
 	OptionIdentify: Identify,
 	CodecType:      codec.GobType,
 	ConnectTimeout: time.Second * 10,
+	HandleTimeout:  time.Second * 10,
 }
 
 type Server struct {
@@ -121,7 +123,7 @@ func (server *Server) ServeConn(conn io.ReadWriteCloser) {
 
 	// 根据opt进行head和body解码
 	// f(conn)返回一个具体类型的解编码接口
-	server.serverCodec(f(conn))
+	server.serverCodecAndHandle(f(conn))
 }
 
 // 存储调请求的信息
@@ -136,7 +138,7 @@ type request struct {
 var invalidRequest = struct{}{}
 
 // 读取, 处理, 回复请求
-func (server *Server) serverCodec(cc codec.Codec) {
+func (server *Server) serverCodecAndHandle(cc codec.Codec) {
 	sending := new(sync.Mutex) // 保证回复报文不会交织
 	wg := new(sync.WaitGroup)  // 类似于信号量, 确保goroutine在关闭连接前已经全部handleRequest结束
 	for {
@@ -152,7 +154,7 @@ func (server *Server) serverCodec(cc codec.Codec) {
 		}
 		wg.Add(1)
 		// 新起routine处理请求
-		go server.handleRequest(cc, req, sending, wg)
+		go server.handleRequest(cc, req, sending, wg, DefaultOption.HandleTimeout)
 	}
 	wg.Wait()
 	_ = cc.Close()
@@ -207,13 +209,35 @@ func (server *Server) sendResponse(cc codec.Codec, h *codec.Header, body interfa
 	}
 }
 
-func (server *Server) handleRequest(cc codec.Codec, req *request, sending *sync.Mutex, wg *sync.WaitGroup) {
+func (server *Server) handleRequest(cc codec.Codec, req *request, sending *sync.Mutex, wg *sync.WaitGroup, timeout time.Duration) {
 	defer wg.Done()
-	err := req.svc.call(req.mtype, req.argv, req.replyv)
-	if err != nil {
-		req.h.Err = err.Error()
-		server.sendResponse(cc, req.h, invalidRequest, sending)
+	called := make(chan struct{})
+	sent := make(chan struct{})
+	go func() {
+		err := req.svc.call(req.mtype, req.argv, req.replyv)
+		called <- struct{}{}
+		if err != nil {
+			req.h.Err = err.Error()
+			server.sendResponse(cc, req.h, invalidRequest, sending)
+			sent <- struct{}{}
+			return
+		}
+		server.sendResponse(cc, req.h, req.replyv.Interface(), sending)
+		sent <- struct{}{}
+	}()
+	if timeout == 0 {
+		<-called
+		<-sent
 		return
 	}
-	server.sendResponse(cc, req.h, req.replyv.Interface(), sending)
+	select {
+	// 调用超时, 直接发送错误信息
+	case <-time.After(timeout):
+		req.h.Err = fmt.Sprintf("rpc server: request handle timeout: expect within: %s", timeout)
+		server.sendResponse(cc, req.h, req.replyv.Interface(), sending)
+
+	// 调用未超时, 阻塞等待发送完成
+	case <-called:
+		<-sent
+	}
 }
